@@ -1,0 +1,29 @@
+ollama:
+  base_url: "http://localhost:11434"
+  model: "gpt-oss:20b"
+  timeout: 30
+  max_tokens: 500
+  temperature: 0.7
+  cleanup_on_exit: true
+
+alltalk_tts:
+  base_url: "http://localhost:7851"  # Default AllTalk port
+  enabled: true
+  voice: "default"
+  speed: 1.0
+  pitch: 1.0
+  volume: 0.8
+  timeout: 10
+  auto_play: true
+
+general:
+  assistant_name: "Carlos"
+  log_level: "INFO"
+  response_timeout: 10
+  max_response_length: 1000
+  text_output: true  # Keep showing text responses too
+
+logging:
+  log_file: "logs/carlos.log"
+  max_log_size: "10MB"
+  backup_count: 5
