@@ -1,3 +1,73 @@
+# Carlos AI Assistant Configuration
+# Enhanced configuration with provider abstraction
+
+# AI Provider Configuration
+ai:
+  provider: "ollama"  # ollama, openai, anthropic (future)
+  providers:
+    ollama:
+      base_url: "http://localhost:11434"
+      model: "gpt-oss:20b"
+      models_available: ["gpt-oss:20b", "llama2:7b", "mistral:7b"]
+      timeout: 30
+      max_tokens: 500
+      temperature: 0.7
+      cleanup_on_exit: true
+      unload_timeout: 10
+      verify_unload: true
+    # Future providers:
+    # openai:
+    #   api_key: "your-api-key"
+    #   model: "gpt-4"
+    #   base_url: "https://api.openai.com/v1"
+    # anthropic:
+    #   api_key: "your-api-key"
+    #   model: "claude-3-sonnet"
+
+# Speech Configuration
+speech:
+  tts:
+    provider: "alltalk"  # alltalk, windows, elevenlabs (future)
+    providers:
+      alltalk:
+        base_url: "http://localhost:7851"
+        enabled: true
+        voice: "default"
+        speed: 1.0
+        pitch: 1.0
+        volume: 0.8
+        timeout: 10
+        auto_play: true
+      # Future TTS providers:
+      # windows:
+      #   voice: "default"
+      #   rate: 200
+      # elevenlabs:
+      #   api_key: "your-api-key"
+      #   voice: "default"
+  # Future STT configuration (Phase 3):
+  # stt:
+  #   provider: "windows"
+  #   language: "en-US"
+
+# General Settings
+general:
+  assistant_name: "Carlos"
+  personality_profile: "helpful_professional"  # Future personality system
+  log_level: "INFO"
+  response_timeout: 10
+  max_response_length: 1000
+  text_output: true  # Keep showing text responses too
+  plugins_enabled: []  # Future plugin system
+
+# Logging Configuration
+logging:
+  log_file: "logs/carlos.log"
+  max_log_size: "10MB"
+  backup_count: 5
+
+# Legacy configuration support (for backward compatibility)
+# These will be automatically migrated to the new structure
 ollama:
   base_url: "http://localhost:11434"
   model: "gpt-oss:20b"
@@ -7,7 +77,7 @@ ollama:
   cleanup_on_exit: true
 
 alltalk_tts:
-  base_url: "http://localhost:7851"  # Default AllTalk port
+  base_url: "http://localhost:7851"
   enabled: true
   voice: "default"
   speed: 1.0
@@ -15,15 +85,3 @@ alltalk_tts:
   volume: 0.8
   timeout: 10
   auto_play: true
-
-general:
-  assistant_name: "Carlos"
-  log_level: "INFO"
-  response_timeout: 10
-  max_response_length: 1000
-  text_output: true  # Keep showing text responses too
-
-logging:
-  log_file: "logs/carlos.log"
-  max_log_size: "10MB"
-  backup_count: 5
