@@ -253,14 +253,14 @@ class CarlosSetup:
             return False
     
     def setup_alltalk(self) -> bool:
-        """Fix and complete AllTalk TTS setup."""
-        self.log("🗣️ Setting up AllTalk TTS...")
+        """Fix and complete AllTalk TTS setup with Python 3.13 compatibility"""
+        self.log("Setting up AllTalk TTS...")
         
         alltalk_dir = self.project_root / "alltalk_tts"
         
         # Clone AllTalk if not exists
         if not alltalk_dir.exists():
-            self.log("📥 Cloning AllTalk TTS...")
+            self.log("Cloning AllTalk TTS...")
             try:
                 result = subprocess.run([
                     'git', 'clone', 
@@ -271,22 +271,25 @@ class CarlosSetup:
                    timeout=300)
                 
                 if result.returncode != 0:
-                    self.log(f"❌ Failed to clone AllTalk TTS: {result.stderr}")
+                    self.log(f"Failed to clone AllTalk TTS: {result.stderr}")
                     return False
                     
-                self.log("✅ AllTalk TTS cloned successfully")
+                self.log("AllTalk TTS cloned successfully")
             except subprocess.TimeoutExpired:
-                self.log("❌ AllTalk clone timed out")
+                self.log("AllTalk clone timed out")
                 return False
             except Exception as e:
-                self.log(f"❌ AllTalk clone error: {e}")
+                self.log(f"AllTalk clone error: {e}")
                 return False
         
-        # Find the correct requirements file
+        self.log("Setting up AllTalk requirements...")
+        
+        # NEW: Find correct requirements file with Python 3.13 compatibility
         req_paths = [
-            alltalk_dir / "requirements.txt",
             alltalk_dir / "system" / "requirements" / "requirements_standalone.txt",
-            alltalk_dir / "system" / "requirements" / "requirements.txt"
+            alltalk_dir / "system" / "requirements" / "requirements_windows.txt",
+            alltalk_dir / "system" / "requirements" / "requirements.txt",
+            alltalk_dir / "requirements.txt"
         ]
         
         req_file = None
@@ -296,24 +299,35 @@ class CarlosSetup:
                 break
         
         if not req_file:
-            self.log("⚠️ No requirements file found, creating basic one...")
-            # Create basic requirements if none found
-            basic_reqs = """torch
-torchaudio
-fastapi
-uvicorn
-pydantic
-requests
-numpy
+            self.log("No requirements file found, creating Python 3.13 compatible version...")
+            # Create Python 3.13 compatible requirements
+            compatible_requirements = """torch>=2.0.0
+torchaudio>=2.0.0
+fastapi>=0.68.0
+uvicorn>=0.15.0
+pydantic>=1.8.0
+numpy>=1.21.0
+scipy>=1.7.0
+librosa>=0.9.0
+soundfile>=0.10.0
+psutil>=5.8.0
+requests>=2.26.0
+aiofiles>=0.7.0
+python-multipart>=0.0.5
+ctranslate2>=4.6.0
+transformers>=4.21.0
 """
-            with open(alltalk_dir / "requirements.txt", "w") as f:
-                f.write(basic_reqs)
-            req_file = alltalk_dir / "requirements.txt"
+            
+            with open(alltalk_dir / "requirements_python313.txt", "w") as f:
+                f.write(compatible_requirements.strip())
+            req_file = alltalk_dir / "requirements_python313.txt"
+            self.log(f"Created compatible requirements: {req_file}")
         
-        self.log(f"📦 Installing AllTalk requirements from: {req_file}")
+        self.log(f"Installing AllTalk requirements from: {req_file}")
         
-        # Install requirements
-        try:
+        # Install with retry and error handling
+        max_retries = 2
+        for attempt in range(max_retries):
             result = subprocess.run([
                 sys.executable, "-m", "pip", "install", "-r", str(req_file)
             ], capture_output=True, text=True, 
@@ -321,18 +335,27 @@ numpy
                timeout=300)
             
             if result.returncode == 0:
-                self.log("✅ AllTalk requirements installed successfully")
+                self.log("AllTalk requirements installed successfully")
                 return True
             else:
-                self.log(f"❌ AllTalk requirements installation failed: {result.stderr}")
-                return False
-                
-        except subprocess.TimeoutExpired:
-            self.log("❌ AllTalk requirements installation timed out")
-            return False
-        except Exception as e:
-            self.log(f"❌ AllTalk requirements installation error: {e}")
-            return False
+                self.log(f"Attempt {attempt + 1} failed: {result.stderr[:200]}")
+                if attempt == 0:
+                    # Try with --no-deps for problematic packages
+                    self.log("Retrying with fallback method...")
+                    fallback_result = subprocess.run([
+                        sys.executable, "-m", "pip", "install", 
+                        "torch", "torchaudio", "fastapi", "uvicorn", "numpy", "scipy",
+                        "--upgrade"
+                    ], capture_output=True, text=True, 
+                       encoding='utf-8', errors='replace',
+                       timeout=300)
+                    
+                    if fallback_result.returncode == 0:
+                        self.log("Core AllTalk dependencies installed")
+                        return True
+        
+        self.log("AllTalk requirements installation failed")
+        return False
     
     def install_python_requirements(self) -> bool:
         """Install Python requirements for Carlos."""

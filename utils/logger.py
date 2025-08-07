@@ -66,17 +66,19 @@ class CarlosLogger:
         self.logger.addHandler(file_handler)
     
     def _setup_console_handler(self) -> None:
-        """Setup colored console handler with Windows Unicode support."""
+        """Setup colored console handler with Windows Unicode support fix."""
         console_handler = colorlog.StreamHandler()
         
-        # CRITICAL: Fix Windows console encoding for emoji support
+        # CRITICAL FIX: Windows console encoding
         if sys.platform == "win32":
             try:
-                # Force UTF-8 encoding for Windows console
-                console_handler.stream = codecs.getwriter('utf-8')(sys.stdout.buffer)
-            except (AttributeError, LookupError):
-                # Fallback if UTF-8 encoding fails
-                self.logger.warning("Could not set UTF-8 encoding for console, using fallback")
+                # Try to set console to UTF-8
+                console_handler.stream = codecs.getwriter('utf-8')(
+                    sys.stdout.buffer, errors='replace'
+                )
+            except (AttributeError, OSError):
+                # Fallback: replace problematic characters
+                console_handler.addFilter(UnicodeFilter())
         
         color_formatter = colorlog.ColoredFormatter(
             '%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -149,6 +151,32 @@ class CarlosLogger:
             self.logger.critical(message, exc_info=exc_info)
         except UnicodeEncodeError:
             self.logger.critical(self._safe_log_message(message), exc_info=exc_info)
+
+
+class UnicodeFilter(logging.Filter):
+    """Filter to replace Unicode characters that cause Windows console issues"""
+    
+    def filter(self, record):
+        if hasattr(record, 'msg') and isinstance(record.msg, str):
+            # Replace problematic Unicode characters
+            replacements = {
+                '✅': '[OK]',
+                '❌': '[ERROR]', 
+                '⚠️': '[WARNING]',
+                '🔊': '[AUDIO]',
+                '🚀': '[START]',
+                '📦': '[INSTALL]',
+                '🧠': '[AI]',
+                '🔍': '[CHECK]',
+                '🎉': '[SUCCESS]',
+                '📝': '[CREATED]',
+                '🔄': '[RETRY]'
+            }
+            
+            for emoji, replacement in replacements.items():
+                record.msg = record.msg.replace(emoji, replacement)
+        
+        return True
 
 
 def get_logger(name: str, config: dict) -> CarlosLogger:

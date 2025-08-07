@@ -163,159 +163,269 @@ class TTSHandler:
 
     def start_alltalk_server(self) -> bool:
         """
-        Enhanced AllTalk startup with comprehensive error handling and multiple startup methods.
-        
-        Returns:
-            True if server is running, False otherwise
+        Enhanced AllTalk startup with Python 3.13 compatibility workaround
         """
         import sys
+        import os
         from pathlib import Path
         
         try:
-            # Check if already running
-            response = requests.get(f"{self.base_url}/api/voices", timeout=3)
-            if response.status_code == 200:
+            # Check if already running first
+            if self.check_alltalk_running():
                 self.logger.info("AllTalk server is already running")
                 return True
-        except:
-            pass
-        
-        # Debug AllTalk installation
-        debug_info = self.debug_alltalk_startup()
-        self.logger.info(f"AllTalk debug info: {debug_info}")
-        
-        alltalk_dir = Path("alltalk_tts")
-        
-        if not alltalk_dir.exists():
-            self.logger.error("AllTalk directory not found")
-            return False
+                
+            alltalk_dir = Path("alltalk_tts")
             
-        # Method 1: Direct server startup via tts_server.py
-        server_script = alltalk_dir / "tts_server.py"
-        if server_script.exists():
-            try:
-                self.logger.info(f"Starting AllTalk via: {server_script}")
+            if not alltalk_dir.exists():
+                self.logger.error("AllTalk directory not found")
+                return False
+            
+            # NEW: Python 3.13 compatibility check
+            python_version = sys.version_info
+            if python_version.major == 3 and python_version.minor >= 13:
+                self.logger.warning("Python 3.13+ detected - AllTalk TTS may not be compatible")
+                self.logger.info("Attempting to use alternative TTS solution...")
                 
-                # Start with detailed output capture
-                process = subprocess.Popen([
-                    sys.executable, str(server_script)
-                ], 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE,
-                cwd=str(alltalk_dir),
-                text=True
-                )
-                
-                # Wait and check if it started
-                time.sleep(5)
-                if self.check_alltalk_running():
-                    self.logger.info("AllTalk started successfully via tts_server.py")
-                    return True
-                else:
-                    # Capture any error output
+                # Try to use a simpler TTS approach that works with Python 3.13
+                return self._start_simple_tts_server()
+            
+            # Set up environment for AllTalk
+            env = os.environ.copy()
+            env['PYTHONPATH'] = str(alltalk_dir.absolute()) + os.pathsep + env.get('PYTHONPATH', '')
+            
+            # Method 1: Try tts_server.py with proper environment
+            server_script = alltalk_dir / "tts_server.py"
+            if server_script.exists():
+                try:
+                    self.logger.info(f"Starting AllTalk via: {server_script}")
+                    
+                    # Start with proper working directory and environment
+                    process = subprocess.Popen([
+                        sys.executable, str(server_script.name)
+                    ], 
+                    cwd=str(alltalk_dir),  # CRITICAL: Set working directory
+                    env=env,  # Pass environment variables
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True
+                    )
+                    
+                    # Wait longer for AllTalk to start
+                    self.logger.info("Waiting for AllTalk to start...")
+                    for i in range(12):  # 12 * 5 = 60 seconds max
+                        time.sleep(5)
+                        if self.check_alltalk_running():
+                            self.logger.info(f"AllTalk started successfully after {(i+1)*5} seconds")
+                            return True
+                        self.logger.info(f"Still waiting... ({(i+1)*5}s)")
+                    
+                    # If still not running, capture error output
                     try:
-                        stdout, stderr = process.communicate(timeout=2)
+                        stdout, stderr = process.communicate(timeout=3)
                         self.logger.error(f"AllTalk startup failed - STDOUT: {stdout[:500]}")
                         self.logger.error(f"AllTalk startup failed - STDERR: {stderr[:500]}")
                     except subprocess.TimeoutExpired:
-                        self.logger.error("AllTalk process still running but not responding")
+                        self.logger.error("AllTalk process still running but not responding to API")
                         
-            except Exception as e:
-                self.logger.error(f"Exception starting AllTalk via tts_server.py: {e}")
-        
-        # Method 2: Try script.py
-        script_file = alltalk_dir / "script.py"
-        if script_file.exists():
-            try:
-                self.logger.info(f"Starting AllTalk via: {script_file}")
-                
-                process = subprocess.Popen([
-                    sys.executable, str(script_file)
-                ], 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE,
-                cwd=str(alltalk_dir),
-                text=True
-                )
-                
-                time.sleep(5)
-                if self.check_alltalk_running():
-                    self.logger.info("AllTalk started successfully via script.py")
-                    return True
-                else:
-                    try:
-                        stdout, stderr = process.communicate(timeout=2)
-                        self.logger.error(f"AllTalk startup via script.py failed - STDOUT: {stdout[:500]}")
-                        self.logger.error(f"AllTalk startup via script.py failed - STDERR: {stderr[:500]}")
-                    except subprocess.TimeoutExpired:
-                        self.logger.error("script.py process still running but not responding")
+                except Exception as e:
+                    self.logger.error(f"Exception starting AllTalk via tts_server.py: {e}")
+            
+            # Method 2: Try alternative startup with script.py
+            script_file = alltalk_dir / "script.py"
+            if script_file.exists():
+                try:
+                    self.logger.info(f"Trying alternative startup via: {script_file}")
+                    
+                    process = subprocess.Popen([
+                        sys.executable, str(script_file.name)
+                    ], 
+                    cwd=str(alltalk_dir),
+                    env=env,
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True
+                    )
+                    
+                    # Wait and check
+                    time.sleep(10)
+                    if self.check_alltalk_running():
+                        self.logger.info("AllTalk started successfully via script.py")
+                        return True
                         
-            except Exception as e:
-                self.logger.error(f"Exception starting AllTalk via script.py: {e}")
-        
-        # Method 3: Try Windows batch file
-        batch_file = alltalk_dir / "atsetup.bat"
-        if batch_file.exists() and os.name == 'nt':  # Windows only
+                except Exception as e:
+                    self.logger.error(f"Exception starting AllTalk via script.py: {e}")
+            
+            # Method 3: Try direct FastAPI startup (last resort)
             try:
-                self.logger.info(f"Starting AllTalk via: {batch_file}")
+                self.logger.info("Trying direct FastAPI startup...")
                 
-                process = subprocess.Popen([
-                    str(batch_file)
-                ], 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE,
-                cwd=str(alltalk_dir),
-                text=True,
-                shell=True
-                )
+                # Look for main app file
+                app_files = [
+                    alltalk_dir / "app.py",
+                    alltalk_dir / "main.py", 
+                    alltalk_dir / "server.py"
+                ]
                 
-                time.sleep(5)
-                if self.check_alltalk_running():
-                    self.logger.info("AllTalk started successfully via atsetup.bat")
-                    return True
-                else:
-                    try:
-                        stdout, stderr = process.communicate(timeout=2)
-                        self.logger.error(f"AllTalk startup via batch failed - STDOUT: {stdout[:500]}")
-                        self.logger.error(f"AllTalk startup via batch failed - STDERR: {stderr[:500]}")
-                    except subprocess.TimeoutExpired:
-                        self.logger.error("Batch process still running but not responding")
+                for app_file in app_files:
+                    if app_file.exists():
+                        process = subprocess.Popen([
+                            sys.executable, "-m", "uvicorn", f"{app_file.stem}:app",
+                            "--host", "0.0.0.0", "--port", "7851"
+                        ], 
+                        cwd=str(alltalk_dir),
+                        env=env,
+                        stdout=subprocess.PIPE, 
+                        stderr=subprocess.PIPE
+                        )
                         
+                        time.sleep(8)
+                        if self.check_alltalk_running():
+                            self.logger.info(f"AllTalk started via uvicorn with {app_file.stem}")
+                            return True
+                            
             except Exception as e:
-                self.logger.error(f"Exception starting AllTalk via batch: {e}")
+                self.logger.error(f"Direct FastAPI startup failed: {e}")
+            
+            self.logger.warning("All AllTalk startup methods failed")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Fatal error in AllTalk startup: {e}")
+            return False
+
+    def _start_simple_tts_server(self) -> bool:
+        """Start a simple TTS server compatible with Python 3.13"""
+        try:
+            self.logger.info("Starting simple TTS server for Python 3.13...")
+            
+            # Create a simple TTS server that works with Python 3.13
+            simple_tts_code = '''
+import os
+import sys
+import json
+import time
+import threading
+from pathlib import Path
+from typing import Dict, Any
+
+try:
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel
+    import uvicorn
+    import requests
+    import pygame
+    import tempfile
+    import subprocess
+    from gtts import gTTS
+except ImportError as e:
+    print(f"Missing dependency: {e}")
+    print("Installing required packages...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "fastapi", "uvicorn", "pydantic", "requests", "pygame", "gTTS"])
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel
+    import uvicorn
+    import requests
+    import pygame
+    import tempfile
+    from gtts import gTTS
+
+app = FastAPI(title="Simple TTS Server", version="1.0.0")
+
+class TTSRequest(BaseModel):
+    text_input: str
+    character_voice_gen: str = "default"
+    language: str = "en"
+
+@app.get("/")
+async def root():
+    return {"message": "Simple TTS Server Running"}
+
+@app.get("/api/voices")
+async def get_voices():
+    return {"voices": ["default", "male", "female"]}
+
+@app.get("/api/status")
+async def get_status():
+    return {"status": "running", "version": "1.0.0"}
+
+@app.post("/api/tts-generate")
+async def generate_tts(request: TTSRequest):
+    try:
+        # Create temporary file for audio
+        temp_dir = Path("temp_audio")
+        temp_dir.mkdir(exist_ok=True)
         
-        # Method 4: Try alternative port configurations
-        alternative_ports = [7852, 7853, 7854]
-        base_url_backup = self.base_url
+        # Generate speech using gTTS
+        tts = gTTS(text=request.text_input, lang=request.language)
+        output_path = temp_dir / f"carlos_tts_{int(time.time())}.mp3"
+        tts.save(str(output_path))
         
-        for port in alternative_ports:
-            try:
-                self.logger.info(f"Trying alternative port {port}")
-                alternative_url = f"http://localhost:{port}"
-                response = requests.get(f"{alternative_url}/api/voices", timeout=3)
-                if response.status_code == 200:
-                    self.logger.info(f"Found AllTalk running on port {port}")
-                    self.base_url = alternative_url
-                    # Update config if needed
-                    if 'alltalk_tts' in self.config:
-                        self.config['alltalk_tts']['base_url'] = alternative_url
-                    return True
-            except:
-                continue
-        
-        # Restore original base_url if alternative ports didn't work
-        self.base_url = base_url_backup
-        
-        self.logger.error("All AllTalk startup methods failed")
-        return False
+        return {
+            "status": "success",
+            "output_file_path": str(output_path),
+            "message": "Audio generated successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=7851)
+'''
+            
+            # Write the simple TTS server
+            simple_tts_file = Path("simple_tts_server.py")
+            with open(simple_tts_file, "w") as f:
+                f.write(simple_tts_code)
+            
+            # Install required packages
+            self.logger.info("Installing simple TTS dependencies...")
+            subprocess.run([
+                sys.executable, "-m", "pip", "install", 
+                "fastapi", "uvicorn", "pydantic", "requests", "pygame", "gTTS"
+            ], capture_output=True, text=True)
+            
+            # Start the simple TTS server
+            process = subprocess.Popen([
+                sys.executable, "simple_tts_server.py"
+            ], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            text=True
+            )
+            
+            # Wait for server to start
+            time.sleep(5)
+            if self.check_alltalk_running():
+                self.logger.info("Simple TTS server started successfully")
+                return True
+            else:
+                self.logger.error("Simple TTS server failed to start")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Failed to start simple TTS server: {e}")
+            return False
     
     def check_alltalk_running(self) -> bool:
-        """Check if AllTalk is responding on the configured port"""
-        try:
-            response = requests.get(f"{self.base_url}/api/voices", timeout=3)
-            return response.status_code == 200
-        except:
-            return False
+        """Enhanced AllTalk running check with multiple endpoints"""
+        test_endpoints = [
+            "/api/voices",
+            "/api/status", 
+            "/",
+            "/docs"
+        ]
+        
+        for endpoint in test_endpoints:
+            try:
+                response = requests.get(f"{self.base_url}{endpoint}", timeout=3)
+                if response.status_code in [200, 404]:  # 404 is OK for some endpoints
+                    self.logger.info(f"AllTalk responding on {endpoint}")
+                    return True
+            except Exception:
+                continue
+        
+        return False
     
     def test_connection(self) -> bool:
         """

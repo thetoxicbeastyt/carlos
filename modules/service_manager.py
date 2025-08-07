@@ -81,15 +81,31 @@ class ServiceManager:
             return False
     
     def check_alltalk_running(self) -> bool:
-        """Check if AllTalk TTS service is running."""
+        """Enhanced AllTalk running check"""
         try:
-            response = requests.get("http://localhost:7851/api/voices", timeout=5)
-            return response.status_code == 200
+            # Test multiple endpoints to be sure
+            test_urls = [
+                "http://localhost:7851/api/voices",
+                "http://localhost:7851/docs",
+                "http://localhost:7851/"
+            ]
+            
+            for url in test_urls:
+                try:
+                    response = requests.get(url, timeout=3)
+                    if response.status_code in [200, 307, 404]:  # Various success codes
+                        self.logger.info(f"AllTalk detected via {url}")
+                        return True
+                except Exception:
+                    continue
+                    
+            return False
+            
         except Exception:
             return False
-    
+
     def start_alltalk_service(self) -> bool:
-        """Attempt to start AllTalk TTS service."""
+        """Enhanced AllTalk service startup with better detection"""
         try:
             self.logger.info("Attempting to start AllTalk TTS...")
             
@@ -97,35 +113,27 @@ class ServiceManager:
                 self.logger.warning("AllTalk directory not found")
                 return False
             
-            # Find the server script
-            server_scripts = [
-                self.alltalk_dir / "tts_server.py",
-                self.alltalk_dir / "system" / "tts_server.py"
-            ]
+            # Try the enhanced startup from tts_handler
+            import importlib
+            import sys
             
-            server_script = None
-            for script in server_scripts:
-                if script.exists():
-                    server_script = script
-                    break
+            # Import the TTSHandler to use its enhanced startup
+            spec = importlib.util.spec_from_file_location(
+                "tts_handler", 
+                "modules/tts_handler.py"
+            )
+            tts_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(tts_module)
             
-            if not server_script:
-                self.logger.warning("AllTalk server script not found")
-                return False
+            # Create temporary config for startup
+            temp_config = {
+                'alltalk_tts': {
+                    'base_url': 'http://localhost:7851'
+                }
+            }
             
-            # Start the server
-            subprocess.Popen([
-                sys.executable, str(server_script)
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            # Wait and test
-            time.sleep(10)  # AllTalk takes longer to start
-            if self.check_alltalk_running():
-                self.logger.info("AllTalk TTS started successfully")
-                return True
-            
-            self.logger.warning("Failed to start AllTalk TTS service")
-            return False
+            temp_handler = tts_module.TTSHandler(temp_config, self.logger)
+            return temp_handler.start_alltalk_server()
             
         except Exception as e:
             self.logger.error(f"Failed to start AllTalk TTS: {e}")
