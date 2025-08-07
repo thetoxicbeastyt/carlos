@@ -117,11 +117,14 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# AllTalk TTS specific
-alltalk_tts/voices/
-alltalk_tts/system/at_sounds/
-alltalk_tts/system/config/*.json
-alltalk_tts/finetune/put-voice-samples-in-here/
+# AllTalk TTS - External dependency (auto-installed)
+alltalk_tts/
 
 # Setup flags
 setup_completed.flag
+
+# Carlos-specific runtime files
+start_carlos.bat
+start_carlos.sh
+diagnostics.log
+finetune.log
